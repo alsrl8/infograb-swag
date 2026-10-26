@@ -1,0 +1,1 @@
+ALTER TABLE `receipts` ADD `note` text DEFAULT '' NOT NULL;

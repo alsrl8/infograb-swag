@@ -1,0 +1,1 @@
+ALTER TABLE `receipts` ADD `received` integer DEFAULT 1 NOT NULL;

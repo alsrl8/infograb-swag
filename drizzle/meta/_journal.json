@@ -29,6 +29,20 @@
       "when": 1792993522980,
       "tag": "0003_hoodie_stock_limit",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1792995162672,
+      "tag": "0004_busy_captain_midlands",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1792995374227,
+      "tag": "0005_normal_dexter_bennett",
+      "breakpoints": true
     }
   ]
 }
