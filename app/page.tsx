@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { products } from '../lib/products';
+import { products, totalStock } from '../lib/products';
 import { participants } from '../lib/participants';
 
 type Receipt = { id: string; product: string; name: string; created_at: string };
@@ -119,7 +119,7 @@ export default function Home() {
         <span className="eyebrow">STEP 02 · 가져간 상품 체크</span>
         <h1>어떤 스웩을<br/>가져가셨나요?</h1>
         <p>카드를 눌러 체크하고, 위의 <b>저장</b>을 눌러주세요.</p>
-        <div className="counts"><span><b>{selected.length}</b>개 선택</span><span>스웩 <b>{44 - taken}</b> / 44개 남음</span></div>
+        <div className="counts"><span><b>{selected.length}</b>개 선택</span><span>스웩 <b>{totalStock - taken}</b> / {totalStock}개 남음</span></div>
       </section>
       <aside>🎁 스웩 1개 + 스티커 · 초콜릿은 박스형, Ritter 각각 1개씩</aside>
       <div className="filters" aria-label="상품 분류">{['전체', '피규어', '가방', '모자', '의류', '기타', '초콜릿'].map(category => <button key={category} className={filter === category ? 'active' : ''} onClick={() => setFilter(category)}>{category}</button>)}</div>

@@ -11,7 +11,10 @@ export const products = [
  {id:'tee-black-l',name:'검정 반팔티 · L',category:'의류',icon:'👕',stock:2},
  {id:'tee-black-m',name:'검정 반팔티 · M',category:'의류',icon:'👕',stock:2},
  {id:'tee-white-l',name:'흰색 반팔티 · L',category:'의류',icon:'👕',stock:1},
+ {id:'hoodie-l',name:'후드티 · L',category:'의류',icon:'👕',stock:1},
  {id:'sticker',name:'스티커',category:'기타',icon:'✨',stock:null},
  {id:'choco-box',name:'박스형 초콜릿',category:'초콜릿',icon:'🍫',stock:null},
  {id:'choco-ritter',name:'Ritter 초콜릿',category:'초콜릿',icon:'🍫',stock:null},
 ];
+
+export const totalStock = products.reduce((total, product) => total + (product.stock ?? 0), 0);
