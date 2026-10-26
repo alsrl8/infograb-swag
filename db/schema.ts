@@ -11,3 +11,9 @@ export const passes = sqliteTable('passes', {
  device: text('device').notNull(),
  createdAt: text('created_at').notNull(),
 });
+
+export const absences = sqliteTable('absences', {
+ name: text('name').primaryKey(),
+ device: text('device').notNull(),
+ createdAt: text('created_at').notNull(),
+});

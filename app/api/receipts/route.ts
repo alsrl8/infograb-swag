@@ -56,7 +56,13 @@ export async function PUT(request: Request) {
     return Response.json({ error: '양보한 기기에서 내역을 수정해주세요.' }, { status: 403 });
   }
 
+  const absence = await db.prepare('SELECT device FROM absences WHERE name = ?').bind(name).first<{ device: string }>();
+  if (absence && absence.device !== device) {
+    return Response.json({ error: '부재를 표시한 기기에서 내역을 수정해주세요.' }, { status: 403 });
+  }
+
   const statements = [db.prepare('DELETE FROM receipts WHERE name = ? AND device = ?').bind(name, device)];
+  statements.push(db.prepare('DELETE FROM absences WHERE name = ? AND device = ?').bind(name, device));
   if (!keepPass || pass) statements.push(db.prepare('DELETE FROM passes WHERE name = ? AND device = ?').bind(name, device));
   if (pass) {
     statements.push(db.prepare('INSERT INTO passes (name, device, created_at) VALUES (?, ?, ?)').bind(name, device, new Date().toISOString()));
