@@ -8,6 +8,13 @@
       "when": 1792990325755,
       "tag": "0000_keen_spyke",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1792990559365,
+      "tag": "0001_stock_limit",
+      "breakpoints": true
     }
   ]
 }

@@ -1,12 +1,143 @@
 'use client';
-import {useEffect,useState} from 'react';
-import {products} from '../lib/products';
-type Receipt={id:string;product:string;name:string;created_at:string};
-export default function Home(){
- const [rows,setRows]=useState<Receipt[]>([]),[name,setName]=useState(''),[device,setDevice]=useState(''),[filter,setFilter]=useState('전체'),[busy,setBusy]=useState(''),[message,setMessage]=useState(''),[ready,setReady]=useState(false);
- async function refresh(){try{const r=await fetch('/api/receipts',{cache:'no-store'});if(!r.ok)throw Error();setRows(await r.json());setReady(true);}catch{setMessage('현황을 불러오지 못했습니다. 새로고침해주세요.');}}
- useEffect(()=>{let key=localStorage.getItem('swag-device');if(!key){key=crypto.randomUUID();localStorage.setItem('swag-device',key);}setDevice(key);setName(localStorage.getItem('swag-name')||'');refresh();const timer=setInterval(refresh,10000);return()=>clearInterval(timer);},[]);
- async function toggle(product:string){if(!name.trim()){setMessage('먼저 이름을 입력해주세요.');document.getElementById('name')?.focus();return;}setBusy(product);setMessage('');const own=rows.find(r=>r.product===product&&r.name===name.trim());try{const r=await fetch('/api/receipts',{method:own?'DELETE':'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(own?{id:own.id,device}:{product,name,device})});const data=await r.json() as {error?:string};if(!r.ok)throw Error(data.error||(own?'체크한 기기에서만 취소할 수 있습니다.':'저장하지 못했습니다.'));localStorage.setItem('swag-name',name.trim());await refresh();setMessage(own?'수령 체크를 취소했습니다.':'수령 체크를 저장했습니다.');}catch(e){setMessage(e instanceof Error?e.message:'다시 시도해주세요.');}finally{setBusy('');}}
- const taken=rows.filter(r=>products.find(p=>p.id===r.product)?.stock!==null).length;
- return <main><nav><span className="brand">infograb<span className="dot">®</span></span><span className="pill">n8n COMMUNITY SWAG</span></nav><header><div className="eyebrow">A LITTLE GIFT, A LOT OF AUTOMATION.</div><h1>스웩 챙겼나요<span>?</span></h1><p>마음에 드는 스웩을 가져가셨다면, 여기서 체크해주세요.</p><div className="summary"><strong>{ready?44-taken:'—'}<small>/ 44개 남음</small></strong><span>스티커와 초콜릿 수량 별도</span></div></header><section className="identity"><div><label htmlFor="name">누가 가져가셨나요?</label><p>이름을 입력하고 가져간 상품을 체크하세요.</p></div><input id="name" value={name} maxLength={30} placeholder="이름 또는 닉네임" onChange={e=>setName(e.target.value)} autoComplete="nickname"/></section><aside><span>🎁</span><p>사다리 결과 순서대로 <b>스웩 1개 + 스티커</b>를 골라주세요.<br/>초콜릿은 <b>박스형·Ritter 각각 1개씩</b> 챙겨주세요.</p></aside><div className="toolbar"><h2>상품 목록 <small>{products.length}</small></h2><div className="filters">{['전체','피규어','가방','모자','의류','기타','초콜릿'].map(f=><button key={f} className={filter===f?'active':''} onClick={()=>setFilter(f)}>{f}</button>)}</div></div><div role="status" className="message">{message||(!ready?'현황을 불러오는 중…':'수령 현황은 10초마다 자동 갱신됩니다.')}</div><section className="grid">{products.filter(p=>filter==='전체'||p.category===filter).map(p=>{const receipts=rows.filter(r=>r.product===p.id);const mine=receipts.some(r=>r.name===name.trim());const left=p.stock===null?null:p.stock-receipts.length;return <article key={p.id} className={mine?'mine':''}><div className="visual"><span>{p.icon}</span><em>{p.category}</em></div><div className="cardbody"><div className="stock">{left===null?(p.id==='sticker'?'선착순 소진':'브랜드별 1개씩'):`${left}개 남음 / 총 ${p.stock}개`}</div><h3>{p.name}</h3><div className="people">{receipts.length?receipts.map(r=><span key={r.id}>{r.name} ✓</span>):<small>아직 수령 체크가 없어요</small>}</div><button className={'claim '+(mine?'checked':'')} disabled={!ready||!!busy||(!mine&&left===0)} onClick={()=>toggle(p.id)}>{busy===p.id?'저장 중…':mine?'✓ 수령 완료 · 취소':left===0?'모두 가져갔어요':'+ 가져갔어요'}</button></div></article>;})}</section><footer>THANK YOU, PENNY & APRIL ♥<p>수령 기록은 모두에게 공유됩니다. 취소는 체크한 기기에서 가능합니다.</p></footer></main>;
+
+import { useEffect, useState } from 'react';
+import { products } from '../lib/products';
+import { participants } from '../lib/participants';
+
+type Receipt = { id: string; product: string; name: string; created_at: string };
+
+export default function Home() {
+  const [rows, setRows] = useState<Receipt[]>([]);
+  const [name, setName] = useState('');
+  const [device, setDevice] = useState('');
+  const [selected, setSelected] = useState<string[]>([]);
+  const [filter, setFilter] = useState('전체');
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState('');
+  const [ready, setReady] = useState(false);
+
+  async function refresh() {
+    const response = await fetch('/api/receipts', { cache: 'no-store' });
+    if (!response.ok) throw new Error('현황을 불러오지 못했습니다. 다시 시도해주세요.');
+    const receipts = await response.json() as Receipt[];
+    setRows(receipts);
+    setReady(true);
+    return receipts;
+  }
+
+  useEffect(() => {
+    let key = localStorage.getItem('swag-device');
+    if (!key) {
+      key = crypto.randomUUID();
+      localStorage.setItem('swag-device', key);
+    }
+    setDevice(key);
+    const update = () => refresh().catch(error => setMessage(error.message));
+    update();
+    const timer = setInterval(update, 10000);
+    return () => clearInterval(timer);
+  }, []);
+
+  function chooseName(person: string) {
+    setName(person);
+    setSelected(rows.filter(row => row.name === person).map(row => row.product));
+    setMessage('');
+    setFilter('전체');
+    window.scrollTo(0, 0);
+  }
+
+  function back() {
+    const saved = rows.filter(row => row.name === name).map(row => row.product);
+    const dirty = selected.length !== saved.length || selected.some(id => !saved.includes(id));
+    if (dirty && !window.confirm('저장하지 않은 선택이 있습니다. 이름 선택으로 돌아갈까요?')) return;
+    setName('');
+    setMessage('');
+    window.scrollTo(0, 0);
+  }
+
+  function toggle(id: string) {
+    setSelected(current => current.includes(id) ? current.filter(item => item !== id) : [...current, id]);
+    setMessage('');
+  }
+
+  async function save() {
+    setSaving(true);
+    setMessage('');
+    try {
+      const response = await fetch('/api/receipts', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, device, products: selected }),
+      });
+      const result = await response.json() as { error?: string };
+      if (!response.ok) throw new Error(result.error || '저장하지 못했습니다. 다시 시도해주세요.');
+      await refresh();
+      setName('');
+      setSelected([]);
+      setMessage('저장했습니다. 수령 현황에 반영되었어요.');
+      window.scrollTo(0, 0);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : '저장하지 못했습니다.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const completed = new Set(rows.map(row => row.name));
+  const taken = rows.filter(row => products.some(product => product.id === row.product && product.stock !== null)).length;
+
+  return <main>
+    <header className="app-header">
+      {name ? <button className="back" onClick={back} disabled={saving} aria-label="이름 선택으로 돌아가기">‹</button> : <span className="brand">infograb<span>®</span></span>}
+      <strong>{name ? `${name}의 스웩` : 'n8n 스웩 나눔'}</strong>
+      {name ? <button className="save" onClick={save} disabled={saving || !ready}>{saving ? '저장 중…' : '저장'}</button> : <span className="header-mark">🎁</span>}
+    </header>
+
+    {!name ? <>
+      <section className="intro">
+        <span className="eyebrow">STEP 01 · 내 이름 선택</span>
+        <h1>반가워요!<br/>내 이름을 찾아주세요.</h1>
+        <p>사다리 결과 순서대로 나열했어요.<br/>본인 이름을 누르면 상품 선택으로 넘어갑니다.</p>
+        <div className="legend"><span>● 수령 완료</span><span>{completed.size} / {participants.length}명</span></div>
+      </section>
+      <div role="status" className="message">{message || (!ready ? '수령 현황을 불러오는 중…' : '')}</div>
+      <section className="participants" aria-label="사다리 순서별 이름 선택">
+        {participants.map((person, index) => <button key={person} className={`person ${completed.has(person) ? 'complete' : ''}`} onClick={() => chooseName(person)} disabled={!ready}>
+          <span className="rank">{String(index + 1).padStart(2, '0')}</span>
+          <span className="person-name">{person}</span>
+          <span className="person-status">{completed.has(person) ? '✓ 수령 완료' : '선택 ›'}</span>
+        </button>)}
+      </section>
+      <footer>THANK YOU, PENNY & APRIL ♥<p>저장한 수령 현황은 모두에게 공유됩니다.</p></footer>
+    </> : <>
+      <section className="intro product-intro">
+        <span className="eyebrow">STEP 02 · 가져간 상품 체크</span>
+        <h1>어떤 스웩을<br/>가져가셨나요?</h1>
+        <p>카드를 눌러 체크하고, 위의 <b>저장</b>을 눌러주세요.</p>
+        <div className="counts"><span><b>{selected.length}</b>개 선택</span><span>스웩 <b>{44 - taken}</b> / 44개 남음</span></div>
+      </section>
+      <aside>🎁 스웩 1개 + 스티커 · 초콜릿은 박스형, Ritter 각각 1개씩</aside>
+      <div className="filters" aria-label="상품 분류">{['전체', '피규어', '가방', '모자', '의류', '기타', '초콜릿'].map(category => <button key={category} className={filter === category ? 'active' : ''} onClick={() => setFilter(category)}>{category}</button>)}</div>
+      <div role="status" className="message">{message || '선택 후 헤더의 저장 버튼을 눌러야 반영됩니다.'}</div>
+      <section className="products" aria-label="상품 선택">
+        {products.filter(product => filter === '전체' || product.category === filter).map(product => {
+          const checked = selected.includes(product.id);
+          const receipts = rows.filter(row => row.product === product.id);
+          const saved = receipts.some(row => row.name === name);
+          const remaining = product.stock === null ? null : product.stock - receipts.length;
+          const soldOut = remaining === 0 && !saved;
+          return <button key={product.id} type="button" className={`product ${checked ? 'checked' : ''}`} aria-pressed={checked} disabled={saving || (soldOut && !checked)} onClick={() => toggle(product.id)}>
+            <div className="visual"><span>{product.icon}</span><span className="check">{checked ? '✓' : ''}</span></div>
+            <div className="product-info">
+              <span className="stock">{remaining === null ? (product.id === 'sticker' ? '선착순 소진' : '1인 1개') : `${remaining}개 남음 / ${product.stock}개`}</span>
+              <h2>{product.name}</h2>
+              <span className="selection">{checked ? '선택했어요' : soldOut ? '모두 가져갔어요' : '눌러서 체크'}</span>
+              <span className="receivers">{receipts.length ? receipts.map(row => row.name).join(', ') : '아직 수령한 사람이 없어요'}</span>
+            </div>
+          </button>;
+        })}
+      </section>
+      <footer>선택한 기기에서 수령 내역을 수정할 수 있어요.</footer>
+    </>}
+  </main>;
 }
