@@ -68,7 +68,7 @@ export default function Home() {
   }
 
   function toggle(id: string) {
-    setReceivedIds(current => current.filter(product => product !== id));
+    setReceivedIds(current => selected.includes(id) ? current.filter(product => product !== id) : [...current, id]);
     setSelected(current => current.includes(id) ? current.filter(item => item !== id) : [...current, id]);
     setMessage('');
   }
@@ -127,13 +127,13 @@ export default function Home() {
       <section className="intro product-intro">
         <span className="eyebrow">STEP 02 · 상품 선택 및 수령 확인</span>
         <h1>어떤 스웩을<br/>골랐나요?</h1>
-        <p>카드를 눌러 체크하고, 위의 <b>저장</b>을 눌러주세요.</p>
+        <p>가져간 상품 카드를 누르고, 위의 <b>저장</b>을 눌러주세요.</p>
         <div className="counts"><span><b>{selected.length}</b>개 선택</span><span>선택 가능 <b>{totalStock - taken}</b> / {totalStock}개</span></div>
       </section>
       {absentNames.includes(name) && <aside className="absence-notice">부재로 보류 중이에요. 선택을 확인하고 저장하면 보류가 해제됩니다.</aside>}
       <section className="receipt-status" aria-label="수령 상태">
-        <strong>상품별 수령 확인</strong>
-        <p>골라만 뒀다면 미수령으로 두세요. 카드 오른쪽 위의 미수령 버튼을 눌러 수령 상태를 바꾼 뒤 저장해주세요.</p>
+        <strong>카드를 누르면 수령 완료 ✓</strong>
+        <p>골라만 두고 나중에 받으려면 카드 오른쪽 위의 <b>미수령으로 변경</b>을 눌러주세요.</p>
       </section>
       <aside>🎁 스웩 1개 + 스티커 · 초콜릿은 박스형, Ritter 각각 1개씩</aside>
       <div className="filters" aria-label="상품 분류">{['전체', '피규어', '가방', '모자', '의류', '기타', '초콜릿'].map(category => <button key={category} className={filter === category ? 'active' : ''} onClick={() => setFilter(category)}>{category}</button>)}</div>
@@ -141,21 +141,22 @@ export default function Home() {
       <section className="products" aria-label="상품 선택">
         {products.filter(product => filter === '전체' || product.category === filter).map(product => {
           const checked = selected.includes(product.id);
+          const collected = checked && receivedIds.includes(product.id);
           const receipts = rows.filter(row => row.product === product.id);
           const saved = receipts.some(row => row.name === name);
           const remaining = product.stock === null ? null : product.stock - receipts.length;
           const soldOut = remaining === 0 && !saved;
           return <article key={product.id} className="product-entry">
-            <button type="button" className={`receipt-corner ${receivedIds.includes(product.id) && checked ? 'collected' : ''}`} disabled={saving || !checked} aria-label={`${product.name} ${checked && receivedIds.includes(product.id) ? '수령 완료, 미수령으로 변경' : '미수령, 수령 완료로 변경'}`} aria-pressed={checked && receivedIds.includes(product.id)} onClick={() => {
+            {checked && <button type="button" className={`receipt-corner ${collected ? 'collected' : ''}`} disabled={saving || !checked} aria-label={`${product.name} ${checked && receivedIds.includes(product.id) ? '수령 완료, 미수령으로 변경' : '미수령, 수령 완료로 변경'}`} aria-pressed={checked && receivedIds.includes(product.id)} onClick={() => {
               setReceivedIds(current => current.includes(product.id) ? current.filter(id => id !== product.id) : [...current, product.id]);
               setMessage('');
-            }}>{checked && receivedIds.includes(product.id) ? '✓ 수령 완료' : '미수령'}</button>
-            <button type="button" className={`product ${checked ? 'checked' : ''}`} aria-pressed={checked} disabled={saving || (soldOut && !checked)} onClick={() => toggle(product.id)}>
+            }}>{collected ? '미수령으로 변경' : '수령 완료로 변경'}</button>}
+            <button type="button" className={`product ${checked ? collected ? 'checked' : 'checked pending-product' : ''}`} aria-pressed={checked} disabled={saving || (soldOut && !checked)} onClick={() => toggle(product.id)}>
             <div className="visual"><span>{product.icon}</span><span className="check">{checked ? '✓' : ''}</span></div>
             <div className="product-info">
               <span className="stock">{remaining === null ? (product.id === 'sticker' ? '선착순 소진' : '1인 1개') : `${remaining}개 남음 / ${product.stock}개`}</span>
               <h2>{product.name}</h2>
-              <span className="selection">{checked ? '선택했어요' : soldOut ? '모두 가져갔어요' : '눌러서 체크'}</span>
+              <span className="selection">{checked ? collected ? '✓ 수령 완료' : '◷ 미수령 · 나중에 받을게요' : soldOut ? '모두 가져갔어요' : '눌러서 수령 체크'}</span>
               <span className="receivers">{receipts.length ? receipts.map(row => `${row.name} (${row.received ? '수령' : '미수령'}${row.note ? ' · ' + row.note : ''})`).join(', ') : '아직 수령한 사람이 없어요'}</span>
             </div>
           </button>
