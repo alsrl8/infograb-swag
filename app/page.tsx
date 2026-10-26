@@ -8,6 +8,7 @@ type Receipt = { id: string; product: string; name: string; created_at: string }
 
 export default function Home() {
   const [rows, setRows] = useState<Receipt[]>([]);
+  const [passedNames, setPassedNames] = useState<string[]>([]);
   const [name, setName] = useState('');
   const [device, setDevice] = useState('');
   const [selected, setSelected] = useState<string[]>([]);
@@ -17,10 +18,14 @@ export default function Home() {
   const [ready, setReady] = useState(false);
 
   async function refresh() {
-    const response = await fetch('/api/receipts', { cache: 'no-store' });
-    if (!response.ok) throw new Error('현황을 불러오지 못했습니다. 다시 시도해주세요.');
+    const [response, passResponse] = await Promise.all([
+      fetch('/api/receipts', { cache: 'no-store' }),
+      fetch('/api/passes', { cache: 'no-store' }),
+    ]);
+    if (!response.ok || !passResponse.ok) throw new Error('현황을 불러오지 못했습니다. 다시 시도해주세요.');
     const receipts = await response.json() as Receipt[];
     setRows(receipts);
+    setPassedNames(await passResponse.json() as string[]);
     setReady(true);
     return receipts;
   }
@@ -60,21 +65,21 @@ export default function Home() {
     setMessage('');
   }
 
-  async function save() {
+  async function save(pass = false) {
     setSaving(true);
     setMessage('');
     try {
       const response = await fetch('/api/receipts', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, device, products: selected }),
+        body: JSON.stringify({ name, device, products: pass ? [] : selected, pass }),
       });
       const result = await response.json() as { error?: string };
       if (!response.ok) throw new Error(result.error || '저장하지 못했습니다. 다시 시도해주세요.');
       await refresh();
       setName('');
       setSelected([]);
-      setMessage('저장했습니다. 수령 현황에 반영되었어요.');
+      setMessage(pass ? '양보했습니다. 완료로 표시됩니다.' : '저장했습니다. 수령 현황에 반영되었어요.');
       window.scrollTo(0, 0);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : '저장하지 못했습니다.');
@@ -83,14 +88,14 @@ export default function Home() {
     }
   }
 
-  const completed = new Set(rows.map(row => row.name));
+  const completed = new Set([...rows.map(row => row.name), ...passedNames]);
   const taken = rows.filter(row => products.some(product => product.id === row.product && product.stock !== null)).length;
 
   return <main>
     <header className="app-header">
       {name ? <button className="back" onClick={back} disabled={saving} aria-label="이름 선택으로 돌아가기">‹</button> : <span className="brand">infograb<span>®</span></span>}
       <strong>{name ? `${name}의 스웩` : 'n8n 스웩 나눔'}</strong>
-      {name ? <button className="save" onClick={save} disabled={saving || !ready}>{saving ? '저장 중…' : '저장'}</button> : <span className="header-mark">🎁</span>}
+      {name ? <div className="header-actions"><button className="pass" onClick={() => save(true)} disabled={saving || !ready}>양보</button><button className="save" onClick={() => save()} disabled={saving || !ready}>{saving ? '저장 중…' : '저장'}</button></div> : <span className="header-mark">🎁</span>}
     </header>
 
     {!name ? <>
@@ -98,14 +103,14 @@ export default function Home() {
         <span className="eyebrow">STEP 01 · 내 이름 선택</span>
         <h1>반가워요!<br/>내 이름을 찾아주세요.</h1>
         <p>사다리 결과 순서대로 나열했어요.<br/>본인 이름을 누르면 상품 선택으로 넘어갑니다.</p>
-        <div className="legend"><span>● 수령 완료</span><span>{completed.size} / {participants.length}명</span></div>
+        <div className="legend"><span>● 완료 (수령·양보)</span><span>{completed.size} / {participants.length}명</span></div>
       </section>
       <div role="status" className="message">{message || (!ready ? '수령 현황을 불러오는 중…' : '')}</div>
       <section className="participants" aria-label="사다리 순서별 이름 선택">
         {participants.map((person, index) => <button key={person} className={`person ${completed.has(person) ? 'complete' : ''}`} onClick={() => chooseName(person)} disabled={!ready}>
           <span className="rank">{String(index + 1).padStart(2, '0')}</span>
           <span className="person-name">{person}</span>
-          <span className="person-status">{completed.has(person) ? '✓ 수령 완료' : '선택 ›'}</span>
+          <span className="person-status">{passedNames.includes(person) ? '✓ 양보 완료' : completed.has(person) ? '✓ 수령 완료' : '선택 ›'}</span>
         </button>)}
       </section>
       <footer>THANK YOU, PENNY & APRIL ♥<p>저장한 수령 현황은 모두에게 공유됩니다.</p></footer>

@@ -32,8 +32,9 @@ export async function PUT(request: Request) {
   } catch {
     return Response.json({ error: '입력 내용을 확인해주세요.' }, { status: 400 });
   }
-  const { name, device, products: selection } = payload;
-  if (typeof name !== 'string' || !participants.includes(name) ||
+  const { name, device, products: selection, pass = false } = payload;
+  if (typeof pass !== 'boolean' || (pass && (!Array.isArray(selection) || selection.length !== 0)) ||
+      typeof name !== 'string' || !participants.includes(name) ||
       typeof device !== 'string' || device.length < 20 || device.length > 100 ||
       !Array.isArray(selection) || selection.length > products.length ||
       selection.some(id => typeof id !== 'string' || !products.some(product => product.id === id)) ||
@@ -48,7 +49,16 @@ export async function PUT(request: Request) {
     return Response.json({ error: '다른 기기에서 체크한 상품은 체크한 기기에서 취소해주세요.' }, { status: 403 });
   }
 
+  const existingPass = await db.prepare('SELECT device FROM passes WHERE name = ?').bind(name).first<{ device: string }>();
+  if (existingPass && existingPass.device !== device) {
+    return Response.json({ error: '양보한 기기에서 내역을 수정해주세요.' }, { status: 403 });
+  }
+
   const statements = [db.prepare('DELETE FROM receipts WHERE name = ? AND device = ?').bind(name, device)];
+  statements.push(db.prepare('DELETE FROM passes WHERE name = ? AND device = ?').bind(name, device));
+  if (pass) {
+    statements.push(db.prepare('INSERT INTO passes (name, device, created_at) VALUES (?, ?, ?)').bind(name, device, new Date().toISOString()));
+  }
   for (const product of selection) {
     statements.push(db.prepare(
       'INSERT INTO receipts (id, product, name, device, created_at) SELECT ?, ?, ?, ?, ? WHERE NOT EXISTS (SELECT 1 FROM receipts WHERE name = ? AND product = ?)'

@@ -15,6 +15,13 @@
       "when": 1792990559365,
       "tag": "0001_stock_limit",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1792990951385,
+      "tag": "0002_empty_rockslide",
+      "breakpoints": true
     }
   ]
 }
