@@ -46,7 +46,7 @@ export async function PUT(request: Request) {
   const db = env.DB!;
   const { results: existing } = await db.prepare('SELECT product, device, received, note FROM receipts WHERE name = ?')
     .bind(name).all<{ product: string; device: string; received: number; note: string }>();
-  if (existing.some(row => row.device !== device && (!selection.includes(row.product) || row.received !== Number(receivedIds.includes(row.product))))) {
+  if (existing.some(row => row.device !== device && !selection.includes(row.product))) {
     return Response.json({ error: '다른 기기에서 체크한 상품은 체크한 기기에서 취소해주세요.' }, { status: 403 });
   }
 
@@ -66,6 +66,12 @@ export async function PUT(request: Request) {
   if (!keepPass || pass) statements.push(db.prepare('DELETE FROM passes WHERE name = ? AND device = ?').bind(name, device));
   if (pass) {
     statements.push(db.prepare('INSERT INTO passes (name, device, created_at) VALUES (?, ?, ?)').bind(name, device, new Date().toISOString()));
+  }
+  // Receipt status is shared across browsers. Preserve the original selection
+  // and device key while allowing the selected person's collection status to change.
+  for (const row of existing.filter(row => row.device !== device)) {
+    statements.push(db.prepare('UPDATE receipts SET received = ? WHERE name = ? AND product = ?')
+      .bind(Number(receivedIds.includes(row.product)), name, row.product));
   }
   for (const product of selection) {
     statements.push(db.prepare(
