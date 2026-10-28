@@ -18,6 +18,12 @@
 
 ## 개발
 
+`/summary`는 Daisy와 Penny를 위한 상품별 정리 페이지입니다. 추가 선택 가능한 수량,
+수령자, 선택 후 미수령자와 Slack 희망 사항을 구분하며 운영 데이터는 변경하지 않습니다.
+희망 사항은 `lib/summary.ts`에 출처와 함께 기록하며 재고를 확보하지 않습니다.
+초콜릿·스티커처럼 총수량이 없는 상품은 잔여 수량을 추정하지 않습니다.
+집계 검증은 `node --experimental-strip-types --test lib/summary.test.mjs`로 실행합니다.
+
 Node.js 22.13 이상. `npm ci`, `npm run dev`로 실행합니다.
 재고가 바뀌면 `lib/products.ts`와 재고 제한 트리거를 새 마이그레이션으로 함께 변경합니다.
 `npm run db:generate`로 스키마 마이그레이션을 생성하고 `npm run build`로 빌드합니다.

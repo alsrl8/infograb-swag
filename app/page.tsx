@@ -104,7 +104,7 @@ export default function Home() {
     <header className="app-header">
       {name ? <button className="back" onClick={back} disabled={saving} aria-label="이름 선택으로 돌아가기">‹</button> : <span className="brand">infograb<span>®</span></span>}
       <strong>{name ? `${name}의 스웩` : 'n8n 스웩 나눔'}</strong>
-      {name ? <div className="header-actions"><button className="pass" onClick={() => save(true)} disabled={saving || !ready}>양보</button><button className="pass absent" onClick={() => save(false, true)} disabled={saving || !ready}>부재</button><button className="save" onClick={() => save()} disabled={saving || !ready}>{saving ? '저장 중…' : '저장'}</button></div> : <span className="header-mark">🎁</span>}
+      {name ? <div className="header-actions"><button className="pass" onClick={() => save(true)} disabled={saving || !ready}>양보</button><button className="pass absent" onClick={() => save(false, true)} disabled={saving || !ready}>부재</button><button className="save" onClick={() => save()} disabled={saving || !ready}>{saving ? '저장 중…' : '저장'}</button></div> : <a href="/summary" style={{ color: '#426337', fontSize: 13 }}>정리 페이지 ↗</a>}
     </header>
 
     {!name ? <>
