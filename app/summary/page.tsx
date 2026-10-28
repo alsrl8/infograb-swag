@@ -11,14 +11,14 @@ export default function Summary() {
   const [error, setError] = useState('');
   const [updated, setUpdated] = useState('');
   const [filter, setFilter] = useState('전체');
-  const [query, setQuery] = useState('');
+  const [opened, setOpened] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
     async function refresh() {
       try {
         const responses = await Promise.all(['/api/receipts', '/api/absences'].map(url => fetch(url, { cache: 'no-store' })));
-        if (responses.some(response => !response.ok)) throw new Error('현황을 불러오지 못했습니다. 잠시 후 자동으로 다시 확인합니다.');
+        if (responses.some(response => !response.ok)) throw new Error('현황을 불러오지 못했습니다. 잠시 후 다시 확인합니다.');
         const [receipts, absences] = await Promise.all([
           responses[0].json() as Promise<Receipt[]>,
           responses[1].json() as Promise<string[]>,
@@ -35,28 +35,36 @@ export default function Summary() {
     return () => { active = false; clearInterval(timer); };
   }, []);
 
-  const items = products.map(product => ({ ...product, ...summarizeProduct(product.stock, rows.filter(row => row.product === product.id)) }));
   const ready = !!updated;
-  const available = items.reduce((sum, item) => sum + (item.available ?? 0), 0);
-  const pending = rows.filter(row => row.received !== 1);
-  const shown = items.filter(item => {
-    const matchesFilter = filter === '전체' || (filter === '남은 상품' && (item.available === null || item.available > 0)) || (filter === '미수령' && item.pending.length > 0) || (filter === '희망 있음' && wishes.some(wish => wish.product === item.id));
-    const text = [item.name, ...item.collected.map(row => row.name), ...item.pending.map(row => row.name), ...wishes.filter(wish => wish.product === item.id).map(wish => wish.name)].join(' ');
-    return matchesFilter && text.toLowerCase().includes(query.trim().toLowerCase());
-  });
   function names(receipts: Receipt[]) {
-    return receipts.length ? receipts.map(row => <span className="summary-name" key={row.id}>{row.name}{row.note && <small>{row.note}</small>}</span>) : <span className="summary-empty">없음</span>;
+    return receipts.length ? receipts.map(row => <li key={row.id}>{row.name}{row.note ? ` · ${row.note}` : ''}{absent.includes(row.name) ? ' · 부재 보류' : ''}</li>) : <li className="overview-empty">없음</li>;
   }
 
-  return <main className="summary-page">
-    <header className="summary-header"><a href="/">← 수령 체크</a><strong>스웩 정리</strong><a href={wishSource} target="_blank" rel="noreferrer">Slack 원문 ↗</a></header>
-    <section className="summary-intro"><span className="eyebrow">DAISY & PENNY</span><h1>남은 스웩과<br />챙겨줄 사람, 한눈에.</h1><p>선택 내역은 10초마다 갱신됩니다. 희망 사항은 Slack과 Miles의 요청을 정리한 내용입니다.</p><p className="summary-updated" role="status">{error || (ready ? `${updated} (한국 시간) 갱신` : '현황을 불러오는 중…')}{error && ready ? ' · 아래는 마지막으로 확인한 현황입니다.' : ''}</p></section>
-    <section className="summary-totals" aria-label="전체 현황"><div><b>{ready ? available : '—'}</b><span>추가 선택 가능</span></div><div><b>{ready ? pending.length : '—'}</b><span>미수령 상품</span></div><div><b>{ready ? new Set(pending.map(row => row.name)).size : '—'}</b><span>챙겨줄 사람</span></div></section>
-    <p className="summary-help">추가 선택 가능 수량은 미수령으로 확보한 몫까지 제외한 수량입니다. 초콜릿·스티커는 총수량이 등록되지 않아 합계에서 제외합니다.</p>
-    <section className="summary-wishes" aria-labelledby="wish-title"><h2 id="wish-title">전달 전에 확인할 희망 사항</h2><p>희망 표시는 재고를 확보하지 않습니다. 아래 선택·수령 내역과 대조해주세요.</p><ul>{wishes.map(wish => <li key={`${wish.name}-${wish.product}`}><strong>{wish.name}</strong><span>{wish.detail}<small>{wish.source}</small></span></li>)}</ul>{ready && rows.some(row => row.name === 'Owen' && row.product === 'cap-space') && <p>Owen의 우주선 모자 선택은 Slack 요청과 달라 확인이 필요합니다.</p>}{ready && absent.includes('Eva') && <p>Eva는 부재 해제 후 선택 저장이 필요합니다.</p>}</section>
-    <section className="summary-controls" aria-label="현황 검색"><label htmlFor="summary-search">상품 또는 이름 찾기</label><input id="summary-search" type="search" value={query} onChange={event => setQuery(event.target.value)} placeholder="예: 모자, Eva" /><div className="summary-filters">{['전체', '남은 상품', '미수령', '희망 있음'].map(value => <button key={value} aria-pressed={filter === value} onClick={() => setFilter(value)}>{value}</button>)}</div></section>
-    {ready && <section className="summary-grid" aria-label="상품별 남은 수량과 수령 현황">{shown.map(item => <article className="summary-item" key={item.id}><div className="summary-item-title"><h2>{item.icon} {item.name}</h2><span className={item.available === 0 ? 'summary-stock empty' : 'summary-stock'}>{item.available === null ? '총수량 미등록' : `선택 가능 ${item.available}개`}</span></div><p className="summary-breakdown">{item.stock === null ? '잔여 수량은 실물 확인이 필요해요.' : `전체 ${item.stock}개 · 수령 ${item.collected.length}개 · 미수령 ${item.pending.length}개 · 아직 전달 전 ${item.uncollected}개`}</p><dl><div><dt>가져간 사람</dt><dd>{names(item.collected)}</dd></div><div><dt>선택 · 미수령</dt><dd>{names(item.pending)}</dd></div><div><dt>희망한 사람</dt><dd>{wishes.filter(wish => wish.product === item.id).length ? wishes.filter(wish => wish.product === item.id).map(wish => <span className="summary-wish-name" key={wish.name}>{wish.name}{wish.name === 'Miles' ? ' (조건부)' : ''}</span>) : <span className="summary-empty">별도 요청 없음</span>}</dd></div></dl></article>)}{shown.length === 0 && <p>검색 조건에 맞는 상품이 없습니다.</p>}</section>}
-    {ready && <section className="summary-absence"><h2>부재로 보류 중</h2><p>{absent.length ? absent.join(', ') : '없음'}</p></section>}
-    <footer>수령 여부는 저장된 체크 기준입니다. 실제 전달 후 수령 체크를 반영해주세요.</footer>
+  return <main>
+    <header className="app-header"><a className="overview-back" href="/">‹ 수령 체크</a><strong>스웩 정리</strong><a className="overview-source" href={wishSource} target="_blank" rel="noreferrer">Slack ↗</a></header>
+    <section className="intro product-intro"><span className="eyebrow">DAISY & PENNY</span><h1>어떤 스웩이<br />남았나요?</h1><p>상품을 누르면 수령·미수령·희망한 사람을 볼 수 있어요.</p><div className="counts"><span>미수령으로 확보한 몫은 잔여 수량에서 제외</span></div></section>
+    <div className="filters" aria-label="상품 분류">{['전체', '피규어', '가방', '모자', '의류', '기타', '초콜릿'].map(category => <button key={category} className={filter === category ? 'active' : ''} onClick={() => { setFilter(category); setOpened(null); }}>{category}</button>)}</div>
+    <div role="status" className="message">{error || (ready ? `${updated} 갱신 · 10초마다 자동 갱신` : '현황을 불러오는 중…')}{error && ready ? ' · 마지막 확인 내역' : ''}</div>
+    <section className="products overview-products" aria-label="상품별 남은 수량과 수령 현황">
+      {products.filter(product => filter === '전체' || product.category === filter).map(product => {
+        const summary = summarizeProduct(product.stock, rows.filter(row => row.product === product.id));
+        const requests = wishes.filter(wish => wish.product === product.id);
+        const expanded = opened === product.id;
+        return <article className={`product-entry ${expanded ? 'overview-open' : ''}`} key={product.id}>
+          <button type="button" className={`product ${expanded ? 'checked' : ''}`} disabled={!ready} aria-expanded={expanded} aria-controls={`details-${product.id}`} onClick={() => setOpened(expanded ? null : product.id)}>
+            <div className="visual"><span>{product.icon}</span></div>
+            <div className="product-info"><span className="stock">{!ready ? '수량 확인 중' : summary.available === null ? '잔여 수량 실물 확인' : `${summary.available}개 남음 / ${product.stock}개`}</span><h2>{product.name}</h2><span className="selection">{expanded ? '접기 ⌃' : '누가 골랐는지 보기 ›'}</span><span className="receivers">{ready ? `수령 ${summary.collected.length} · 미수령 ${summary.pending.length} · 희망 ${requests.length}` : '현황 확인 중'}</span></div>
+          </button>
+          {expanded && <div className="overview-details" id={`details-${product.id}`}>
+            <section><h3>수령 완료</h3><ul>{names(summary.collected)}</ul></section>
+            <section><h3>선택 · 미수령</h3><ul>{names(summary.pending)}</ul></section>
+            <section><h3>희망</h3><ul>{requests.length ? requests.map(wish => <li key={wish.name}><b>{wish.name}</b><span>{wish.detail}</span><small>{wish.source}</small></li>) : <li className="overview-empty">별도 요청 없음</li>}</ul>{requests.length > 0 && <p>희망 표시는 재고를 확보하지 않아요.</p>}</section>
+            {product.id === 'cap-space' && rows.some(row => row.name === 'Owen' && row.product === product.id) && <p>Owen의 모자 선택은 Slack 요청과 달라 확인이 필요해요.</p>}
+            {product.id === 'cap-space' && absent.includes('Eva') && <p>Eva는 부재 해제 후 선택 저장이 필요해요.</p>}
+          </div>}
+        </article>;
+      })}
+    </section>
+    <footer>희망 사항은 Slack과 Miles의 요청 기준입니다.<p>실제 전달 후 기존 수령 체크에서 반영해주세요.</p></footer>
   </main>;
 }
