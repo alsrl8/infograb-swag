@@ -17,10 +17,13 @@ export async function POST(request:Request){
  }catch{ return Response.json({error:'저장하지 못했습니다. 잠시 후 다시 시도해주세요.'},{status:500});}
 }
 export async function DELETE(request:Request){
- const {id,device}=await request.json() as Record<string, unknown>;
- if(typeof id!=='string'||typeof device!=='string')return new Response(null,{status:400});
- const result=await env.DB!.prepare('DELETE FROM receipts WHERE id=? AND device=?').bind(id,device).run();
- return Response.json({ok:!!result.meta.changes},{status:result.meta.changes?200:403});
+ let body: Record<string, unknown>;
+ try { body = await request.json() as Record<string, unknown>; }
+ catch { return Response.json({error:'입력 내용을 확인해주세요.'},{status:400}); }
+ const {id}=body;
+ if(typeof id!=='string')return new Response(null,{status:400});
+ const result=await env.DB!.prepare('DELETE FROM receipts WHERE id=?').bind(id).run();
+ return Response.json({ok:!!result.meta.changes},{status:result.meta.changes?200:404});
 }
 
 // Save the complete selection in one D1 transaction. The stock-limit trigger
@@ -44,39 +47,24 @@ export async function PUT(request: Request) {
 
   const receivedIds = Array.isArray(receivedProducts) ? receivedProducts : received ? selection : [];
   const db = env.DB!;
-  const { results: existing } = await db.prepare('SELECT product, device, received, note FROM receipts WHERE name = ?')
-    .bind(name).all<{ product: string; device: string; received: number; note: string }>();
-  if (existing.some(row => row.device !== device && !selection.includes(row.product))) {
-    return Response.json({ error: '다른 기기에서 체크한 상품은 체크한 기기에서 취소해주세요.' }, { status: 403 });
-  }
-
-  const existingPass = await db.prepare('SELECT device FROM passes WHERE name = ?').bind(name).first<{ device: string }>();
+  const { results: existing } = await db.prepare('SELECT id, product, created_at, note FROM receipts WHERE name = ?')
+    .bind(name).all<{ id: string; product: string; created_at: string; note: string }>();
+  const existingPass = await db.prepare('SELECT name FROM passes WHERE name = ?').bind(name).first();
   const keepPass = !!existingPass && selection.length > 0 && selection.every(id => id === 'choco-box' || id === 'choco-ritter');
-  if (existingPass && existingPass.device !== device && !keepPass) {
-    return Response.json({ error: '양보한 기기에서 내역을 수정해주세요.' }, { status: 403 });
-  }
 
-  const absence = await db.prepare('SELECT device FROM absences WHERE name = ?').bind(name).first<{ device: string }>();
-  if (absence && absence.device !== device) {
-    return Response.json({ error: '부재를 표시한 기기에서 내역을 수정해주세요.' }, { status: 403 });
-  }
-
-  const statements = [db.prepare('DELETE FROM receipts WHERE name = ? AND device = ?').bind(name, device)];
-  statements.push(db.prepare('DELETE FROM absences WHERE name = ? AND device = ?').bind(name, device));
-  if (!keepPass || pass) statements.push(db.prepare('DELETE FROM passes WHERE name = ? AND device = ?').bind(name, device));
+  // Everyone edits the same person's selection. Replace it atomically so
+  // removing another browser's choice and releasing a hold work together.
+  const statements = [db.prepare('DELETE FROM receipts WHERE name = ?').bind(name)];
+  statements.push(db.prepare('DELETE FROM absences WHERE name = ?').bind(name));
+  if (!keepPass || pass) statements.push(db.prepare('DELETE FROM passes WHERE name = ?').bind(name));
   if (pass) {
     statements.push(db.prepare('INSERT INTO passes (name, device, created_at) VALUES (?, ?, ?)').bind(name, device, new Date().toISOString()));
   }
-  // Receipt status is shared across browsers. Preserve the original selection
-  // and device key while allowing the selected person's collection status to change.
-  for (const row of existing.filter(row => row.device !== device)) {
-    statements.push(db.prepare('UPDATE receipts SET received = ? WHERE name = ? AND product = ?')
-      .bind(Number(receivedIds.includes(row.product)), name, row.product));
-  }
   for (const product of selection) {
+    const previous = existing.find(row => row.product === product);
     statements.push(db.prepare(
-      'INSERT INTO receipts (id, product, name, device, created_at, received, note) SELECT ?, ?, ?, ?, ?, ?, ? WHERE NOT EXISTS (SELECT 1 FROM receipts WHERE name = ? AND product = ?)'
-    ).bind(crypto.randomUUID(), product, name, device, new Date().toISOString(), Number(receivedIds.includes(product)), (notes as Record<string, string>)[product] ?? existing.find(row => row.product === product)?.note ?? '', name, product));
+      'INSERT INTO receipts (id, product, name, device, created_at, received, note) VALUES (?, ?, ?, ?, ?, ?, ?)'
+    ).bind(previous?.id ?? crypto.randomUUID(), product, name, device, previous?.created_at ?? new Date().toISOString(), Number(receivedIds.includes(product)), (notes as Record<string, string>)[product] ?? previous?.note ?? ''));
   }
   try {
     await db.batch(statements);

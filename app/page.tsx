@@ -164,7 +164,7 @@ export default function Home() {
           </article>;
         })}
       </section>
-      <footer>선택한 기기에서 수령 내역을 수정할 수 있어요.</footer>
+      <footer>누구나 이름을 선택해 상품과 수령 내역을 수정할 수 있어요.</footer>
     </>}
   </main>;
 }
